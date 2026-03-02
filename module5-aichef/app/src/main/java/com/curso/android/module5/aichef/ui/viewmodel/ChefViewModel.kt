@@ -17,8 +17,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -95,17 +97,17 @@ class ChefViewModel @Inject constructor(
     val authUiState: StateFlow<UiState<Unit>> = _authUiState.asStateFlow()
 
     // =========================================================================
-    // LISTA DE RECETAS
+    // LISTA DE RECETAS CON FILTRO DE FAVORITOS
     // =========================================================================
 
+    private val _showOnlyFavorites = MutableStateFlow(false)
+    val showOnlyFavorites: StateFlow<Boolean> = _showOnlyFavorites.asStateFlow()
+
     /**
-     * Lista de recetas del usuario autenticado
+     * Lista de recetas del usuario autenticado, filtrada por favoritos si aplica.
      *
-     * CONCEPTO: flatMapLatest
-     * Cada vez que cambia el authState, cancelamos el Flow anterior
-     * y creamos uno nuevo basado en el nuevo userId.
-     *
-     * Si el usuario no está autenticado, emitimos lista vacía.
+     * CONCEPTO: combine
+     * Combinamos el flujo de recetas de Firestore con el estado del filtro local.
      */
     val recipes: StateFlow<List<Recipe>> = authState
         .flatMapLatest { state ->
@@ -115,6 +117,9 @@ class ChefViewModel @Inject constructor(
                 }
                 else -> flowOf(emptyList())
             }
+        }
+        .combine(_showOnlyFavorites) { list, onlyFavs ->
+            if (onlyFavs) list.filter { it.isFavorite } else list
         }
         .stateIn(
             scope = viewModelScope,
@@ -283,6 +288,22 @@ class ChefViewModel @Inject constructor(
         viewModelScope.launch {
             firestoreRepository.deleteRecipe(recipeId)
         }
+    }
+
+    /**
+     * Cambia el estado de favorito de una receta
+     */
+    fun toggleFavorite(recipe: Recipe) {
+        viewModelScope.launch {
+            firestoreRepository.toggleFavorite(recipe.id, !recipe.isFavorite)
+        }
+    }
+
+    /**
+     * Activa o desactiva el filtro de solo favoritos
+     */
+    fun setShowOnlyFavorites(show: Boolean) {
+        _showOnlyFavorites.value = show
     }
 
     // =========================================================================
