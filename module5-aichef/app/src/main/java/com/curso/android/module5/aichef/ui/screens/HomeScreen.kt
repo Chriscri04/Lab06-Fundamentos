@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material3.Card
@@ -32,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,21 +49,6 @@ import java.util.Locale
  * =============================================================================
  * HomeScreen - Pantalla principal con lista de recetas
  * =============================================================================
- *
- * CONCEPTO: Query de Firestore por Usuario
- * Las recetas se filtran en el servidor usando:
- * collection("recipes").whereEqualTo("userId", auth.uid)
- *
- * Esto asegura que cada usuario solo ve sus propias recetas,
- * y las reglas de seguridad de Firestore refuerzan esto.
- *
- * CONCEPTO: LazyColumn para listas
- * LazyColumn es el equivalente a RecyclerView en Compose:
- * - Solo renderiza elementos visibles
- * - Soporta scroll infinito
- * - Más eficiente para listas largas
- *
- * =============================================================================
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,8 +58,9 @@ fun HomeScreen(
     onNavigateToDetail: (String) -> Unit,
     onLogout: () -> Unit
 ) {
-    // Observar lista de recetas
+    // Observar lista de recetas y estado del filtro
     val recipes by viewModel.recipes.collectAsStateWithLifecycle()
+    val showOnlyFavorites by viewModel.showOnlyFavorites.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -81,6 +71,18 @@ fun HomeScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
+                    // Botón de filtro de favoritos
+                    IconButton(
+                        onClick = { viewModel.setShowOnlyFavorites(!showOnlyFavorites) }
+                    ) {
+                        Icon(
+                            imageVector = if (showOnlyFavorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Filtrar favoritos",
+                            tint = if (showOnlyFavorites) Color.Red else MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+
+                    // Botón de cerrar sesión
                     IconButton(
                         onClick = {
                             viewModel.signOut()
@@ -110,6 +112,7 @@ fun HomeScreen(
         if (recipes.isEmpty()) {
             // Estado vacío
             EmptyRecipesState(
+                isFilterActive = showOnlyFavorites,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
@@ -125,11 +128,12 @@ fun HomeScreen(
             ) {
                 items(
                     items = recipes,
-                    key = { it.id } // Clave única para optimización
+                    key = { it.id }
                 ) { recipe ->
                     RecipeCard(
                         recipe = recipe,
-                        onClick = { onNavigateToDetail(recipe.id) }
+                        onClick = { onNavigateToDetail(recipe.id) },
+                        onFavoriteToggle = { viewModel.toggleFavorite(recipe) }
                     )
                 }
             }
@@ -138,13 +142,14 @@ fun HomeScreen(
 }
 
 /**
- * Card para mostrar una receta individual
+ * Card para mostrar una receta individual con botón de favorito
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RecipeCard(
     recipe: Recipe,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFavoriteToggle: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -159,8 +164,8 @@ private fun RecipeCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Icono y título
-            androidx.compose.foundation.layout.Row(
+            // Icono, título y botón de favorito
+            Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -183,6 +188,15 @@ private fun RecipeCard(
                         text = formatDate(recipe.createdAt),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Botón de Corazón (Favorito)
+                IconButton(onClick = onFavoriteToggle) {
+                    Icon(
+                        imageVector = if (recipe.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorito",
+                        tint = if (recipe.isFavorite) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -214,7 +228,10 @@ private fun RecipeCard(
  * Estado cuando no hay recetas
  */
 @Composable
-private fun EmptyRecipesState(modifier: Modifier = Modifier) {
+private fun EmptyRecipesState(
+    isFilterActive: Boolean,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center
@@ -224,7 +241,7 @@ private fun EmptyRecipesState(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.Center
         ) {
             Icon(
-                imageVector = Icons.Default.Restaurant,
+                imageVector = if (isFilterActive) Icons.Default.FavoriteBorder else Icons.Default.Restaurant,
                 contentDescription = null,
                 modifier = Modifier.size(80.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -233,7 +250,7 @@ private fun EmptyRecipesState(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "No tienes recetas guardadas",
+                text = if (isFilterActive) "No tienes recetas favoritas aún" else "No tienes recetas guardadas",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -241,7 +258,7 @@ private fun EmptyRecipesState(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "¡Presiona + para generar tu primera receta!",
+                text = if (isFilterActive) "Marca algunas recetas con el corazón para verlas aquí." else "¡Presiona + para generar tu primera receta!",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
