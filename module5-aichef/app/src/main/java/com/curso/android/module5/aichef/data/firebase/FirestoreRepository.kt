@@ -194,4 +194,14 @@ class FirestoreRepository @javax.inject.Inject constructor() : IFirestoreReposit
             Result.failure(Exception("Error actualizando imagen: ${e.message}"))
         }
     }
+    override suspend fun toggleFavorite(recipeId: String, isFavorite: Boolean): Result<Unit> {
+        return try {
+            recipesCollection.document(recipeId)
+                .update("isFavorite", isFavorite)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(Exception("Error al actualizar favorito: ${e.message}"))
+        }
+    }
 }

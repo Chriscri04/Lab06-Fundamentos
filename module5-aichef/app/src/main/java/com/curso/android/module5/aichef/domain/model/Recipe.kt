@@ -47,7 +47,7 @@ data class Recipe(
         "imageUri" to imageUri,
         "generatedImageUrl" to generatedImageUrl,
         "createdAt" to createdAt,
-        "IsFavorite" to isFavorite
+        "isFavorite" to isFavorite
     )
 
     companion object {
@@ -88,4 +88,3 @@ data class GeneratedRecipe(
     val ingredients: List<String>,
     val steps: List<String>
 )
-
